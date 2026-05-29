@@ -59,7 +59,7 @@ ROOT_URLCONF = 'backend_liquidador.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [BASE_DIR / 'core' / 'templates'],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -174,3 +174,9 @@ IMAP_FOLDER = os.environ.get('IMAP_FOLDER', 'INBOX')
 # API de IA (Google Gemini)
 # ---------------------------------------------------------------------------
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
+
+# ---------------------------------------------------------------------------
+# Microservicio ia-liquidador
+# ---------------------------------------------------------------------------
+IA_LIQUIDADOR_URL = os.environ.get('IA_LIQUIDADOR_URL', 'http://ia:8001')
+IA_LIQUIDADOR_API_KEY = os.environ.get('IA_LIQUIDADOR_API_KEY', '')

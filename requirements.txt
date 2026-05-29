@@ -11,3 +11,5 @@ python-dotenv
 pdfplumber
 python-docx
 odfpy
+# HTTP client para microservicio ia-liquidador
+requests

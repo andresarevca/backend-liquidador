@@ -48,3 +48,62 @@ def reprocesar_view(request, pk):
     procesar_carpeta.delay(str(carpeta.pk))
 
     return Response({'detail': f"Pipeline relanzado para carpeta '{carpeta.caso_id}'."})
+
+
+@api_view(['GET'])
+def preinforme_view(request, pk):
+    """
+    Genera y descarga el pre-informe como archivo DOCX (Word) editable.
+
+    Requiere que existan ResultadoIA paso='B' (y opcionalmente paso='C').
+    Llama al microservicio ia-liquidador para obtener los datos estructurados,
+    construye el documento Word con python-docx y lo sirve como descarga.
+
+    GET /api/carpetas/<uuid>/preinforme/
+      → descarga  preinforme-<caso_id>.docx
+    """
+    from django.http import HttpResponse
+    from core.ia_client import generar_preinforme
+    from core.report_generator import generar_docx
+
+    # 1. Obtener carpeta
+    try:
+        carpeta = Carpeta.objects.prefetch_related('documentos').get(pk=pk)
+    except Carpeta.DoesNotExist:
+        return Response({'detail': 'Carpeta no encontrada.'}, status=status.HTTP_404_NOT_FOUND)
+
+    # 2. Obtener resultados IA (paso B obligatorio, paso C opcional)
+    try:
+        paso_b = ResultadoIA.objects.get(carpeta=carpeta, paso='B').resultado
+    except ResultadoIA.DoesNotExist:
+        return Response(
+            {'detail': 'El paso B (extracción) aún no está disponible. Ejecute el pipeline primero.'},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    paso_c_obj = ResultadoIA.objects.filter(carpeta=carpeta, paso='C').first()
+    paso_c = paso_c_obj.resultado if paso_c_obj else None
+
+    # 3. Metadatos del proceso desde la carpeta Django
+    metadatos = {
+        'nro_siniestro': carpeta.caso_id,
+        'fecha_designacion': carpeta.recibida_en.strftime('%d/%m/%Y') if carpeta.recibida_en else '',
+        'documentos': list(carpeta.documentos.values_list('nombre_archivo', flat=True)),
+    }
+
+    # 4. Llamar al microservicio ia-liquidador
+    try:
+        datos = generar_preinforme(carpeta.caso_id, paso_b, paso_c, metadatos)
+    except RuntimeError as exc:
+        return Response({'detail': str(exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+    # 5. Generar DOCX y devolver como descarga
+    docx_bytes = generar_docx(datos)
+    safe_caso_id = carpeta.caso_id.replace('/', '-').replace(' ', '_')
+    filename = f'preinforme-{safe_caso_id}.docx'
+    response = HttpResponse(
+        docx_bytes,
+        content_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    )
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response

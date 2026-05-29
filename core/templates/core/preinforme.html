@@ -1,0 +1,693 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Pre-Informe — {{ datos.caso_id }}</title>
+<style>
+  /* ----------------------------------------------------------------
+     Reset & base
+  ---------------------------------------------------------------- */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 10pt;
+    color: #111;
+    background: #fff;
+    line-height: 1.45;
+  }
+
+  /* ----------------------------------------------------------------
+     Página (para impresión)
+  ---------------------------------------------------------------- */
+  @page { size: A4; margin: 18mm 15mm 18mm 15mm; }
+  @media print {
+    .no-print { display: none !important; }
+    .pagina { page-break-after: always; }
+    body { font-size: 9.5pt; }
+  }
+
+  /* ----------------------------------------------------------------
+     Contenedor
+  ---------------------------------------------------------------- */
+  .doc {
+    max-width: 210mm;
+    margin: 0 auto;
+    padding: 10mm 12mm;
+  }
+
+  /* ----------------------------------------------------------------
+     Cabecera del liquidador
+  ---------------------------------------------------------------- */
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    border-bottom: 2px solid #1a3a6b;
+    padding-bottom: 6px;
+    margin-bottom: 8px;
+  }
+  .header-left {
+    font-size: 9pt;
+    color: #1a3a6b;
+    font-weight: bold;
+    line-height: 1.5;
+  }
+  .header-right {
+    background: #1a3a6b;
+    color: #fff;
+    font-size: 12pt;
+    font-weight: bold;
+    padding: 6px 14px;
+    letter-spacing: 1px;
+    text-align: center;
+    min-width: 120px;
+  }
+  .header-right span { display: block; font-size: 8pt; font-weight: normal; }
+
+  .header-footer {
+    font-size: 7.5pt;
+    color: #555;
+    text-align: center;
+    border-top: 1px solid #ccc;
+    padding-top: 3px;
+    margin-bottom: 12px;
+  }
+
+  /* ----------------------------------------------------------------
+     Título de sección
+  ---------------------------------------------------------------- */
+  h1.titulo-informe {
+    text-align: center;
+    font-size: 13pt;
+    font-weight: bold;
+    text-decoration: underline;
+    margin: 10px 0 14px;
+    text-transform: uppercase;
+  }
+  h2.seccion {
+    font-size: 10pt;
+    font-weight: bold;
+    text-decoration: underline;
+    text-transform: uppercase;
+    margin: 14px 0 6px;
+    border-bottom: 1px solid #1a3a6b;
+    padding-bottom: 2px;
+  }
+  h3.subseccion {
+    font-size: 10pt;
+    font-weight: bold;
+    margin: 10px 0 4px;
+  }
+
+  /* ----------------------------------------------------------------
+     Tabla de datos principales
+  ---------------------------------------------------------------- */
+  table.datos {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 14px;
+    font-size: 9.5pt;
+  }
+  table.datos td {
+    border: 1px solid #aaa;
+    padding: 4px 8px;
+    vertical-align: top;
+  }
+  table.datos td.label {
+    font-weight: bold;
+    width: 30%;
+    background: #f0f4fa;
+    white-space: nowrap;
+  }
+  table.datos td.value { width: 70%; }
+
+  /* ----------------------------------------------------------------
+     Indemnización — badges
+  ---------------------------------------------------------------- */
+  .badge-si {
+    display: inline-block;
+    background: #1a3a6b;
+    color: #fff;
+    font-weight: bold;
+    font-size: 9pt;
+    padding: 1px 8px;
+    border-radius: 3px;
+  }
+  .badge-no {
+    display: inline-block;
+    background: #b10000;
+    color: #fff;
+    font-weight: bold;
+    font-size: 9pt;
+    padding: 1px 8px;
+    border-radius: 3px;
+  }
+  .monto-estimado {
+    font-weight: bold;
+    color: #1a3a6b;
+  }
+
+  /* ----------------------------------------------------------------
+     Lista de documentación
+  ---------------------------------------------------------------- */
+  .doc-list { list-style: none; padding: 0; margin: 6px 0; }
+  .doc-list li { padding: 3px 0; font-size: 9.5pt; }
+  .doc-list li::before { content: "• "; }
+  .estado-no {
+    color: #b10000;
+    font-weight: bold;
+  }
+  .estado-si {
+    color: #0a5200;
+    font-weight: bold;
+  }
+
+  /* ----------------------------------------------------------------
+     Actuaciones
+  ---------------------------------------------------------------- */
+  .actuaciones-list { list-style: none; padding: 0; }
+  .actuaciones-list li { padding: 3px 0 3px 14px; position: relative; font-size: 9.5pt; }
+  .actuaciones-list li::before {
+    content: "▶";
+    position: absolute;
+    left: 0;
+    color: #1a3a6b;
+    font-size: 8pt;
+    top: 4px;
+  }
+  .actuaciones-list .fecha-act { font-weight: bold; color: #1a3a6b; }
+
+  /* ----------------------------------------------------------------
+     Coberturas / póliza
+  ---------------------------------------------------------------- */
+  .cobertura-block {
+    border: 1px solid #aaa;
+    padding: 6px 10px;
+    margin-bottom: 8px;
+    font-size: 9.5pt;
+  }
+  .cobertura-block .cap-titulo {
+    font-weight: bold;
+    font-size: 10pt;
+    color: #1a3a6b;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+  .cobertura-block ul { padding-left: 18px; margin-top: 4px; }
+  .cobertura-block li { margin-bottom: 2px; }
+
+  /* ----------------------------------------------------------------
+     Conclusión pericial
+  ---------------------------------------------------------------- */
+  .narrativo {
+    text-align: justify;
+    font-size: 9.5pt;
+    line-height: 1.6;
+    margin-bottom: 10px;
+  }
+  .narrativo p { margin-bottom: 8px; }
+
+  /* ----------------------------------------------------------------
+     Infracciones / normas
+  ---------------------------------------------------------------- */
+  .infracciones-list { list-style: none; padding: 0; }
+  .infracciones-list li {
+    border-left: 3px solid #b10000;
+    padding: 4px 0 4px 10px;
+    margin-bottom: 6px;
+    font-size: 9.5pt;
+  }
+  .infractor-label { font-weight: bold; }
+
+  /* ----------------------------------------------------------------
+     Alertas
+  ---------------------------------------------------------------- */
+  .alertas-box {
+    background: #fff8e1;
+    border: 1px solid #f59e0b;
+    border-left: 4px solid #f59e0b;
+    padding: 8px 12px;
+    margin-bottom: 12px;
+    font-size: 9.5pt;
+  }
+  .alertas-box ul { padding-left: 16px; margin-top: 4px; }
+  .alertas-box li { margin-bottom: 3px; }
+
+  /* ----------------------------------------------------------------
+     Exposición máxima — rojo
+  ---------------------------------------------------------------- */
+  .exposicion-maxima {
+    font-size: 11pt;
+    font-weight: bold;
+    color: #b10000;
+    text-align: center;
+    border: 1px solid #b10000;
+    padding: 6px;
+    margin: 10px 0;
+    text-transform: uppercase;
+  }
+
+  /* ----------------------------------------------------------------
+     Firma / pie de página
+  ---------------------------------------------------------------- */
+  .firma-section {
+    margin-top: 40px;
+    display: flex;
+    justify-content: space-between;
+    font-size: 9pt;
+  }
+  .firma-block { text-align: center; min-width: 180px; }
+  .firma-block .linea-firma { border-top: 1px solid #000; margin-top: 40px; padding-top: 4px; }
+  .nota-final {
+    font-size: 8.5pt;
+    font-style: italic;
+    text-align: justify;
+    border-top: 1px solid #ccc;
+    margin-top: 20px;
+    padding-top: 8px;
+    color: #444;
+  }
+
+  /* ----------------------------------------------------------------
+     Botón de impresión (solo en pantalla)
+  ---------------------------------------------------------------- */
+  .btn-print {
+    display: block;
+    width: 160px;
+    margin: 16px auto;
+    padding: 8px 20px;
+    background: #1a3a6b;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    font-size: 11pt;
+    cursor: pointer;
+  }
+</style>
+</head>
+<body>
+
+<button class="btn-print no-print" onclick="window.print()">Imprimir / Guardar PDF</button>
+
+<div class="doc">
+
+  <!-- ================================================================
+       CABECERA LIQUIDADOR
+  ================================================================ -->
+  <div class="header">
+    <div class="header-left">
+      SISTEMA DE LIQUIDACIÓN DE SINIESTROS<br>
+      GENERADO AUTOMÁTICAMENTE — IA LIQUIDADOR<br>
+      CASO: {{ datos.caso_id }}
+    </div>
+    <div class="header-right">
+      LIQUIDADOR<br>
+      <span>DE SINIESTROS</span>
+    </div>
+  </div>
+  <div class="header-footer">
+    Documento generado el {{ datos.generado_en }} — Solo para uso interno de la aseguradora
+  </div>
+
+  <!-- ================================================================
+       TÍTULO
+  ================================================================ -->
+  <h1 class="titulo-informe">Pre-Informe</h1>
+
+  <!-- ================================================================
+       TABLA PRINCIPAL DE IDENTIFICACIÓN
+  ================================================================ -->
+  <table class="datos">
+    <tr>
+      <td class="label">SOLICITANTE:</td>
+      <td class="value">{{ datos.solicitante|default:"—" }}</td>
+    </tr>
+    <tr>
+      <td class="label">ASEGURADO:</td>
+      <td class="value">{{ datos.asegurado|default:"—" }}</td>
+    </tr>
+    <tr>
+      <td class="label">N° DE PÓLIZA:</td>
+      <td class="value">{{ datos.nro_poliza|default:"—" }}</td>
+    </tr>
+    <tr>
+      <td class="label">SINIESTRO N°:</td>
+      <td class="value">{{ datos.nro_siniestro|default:"—" }}</td>
+    </tr>
+    <tr>
+      <td class="label">SECCIÓN:</td>
+      <td class="value">{{ datos.seccion }}</td>
+    </tr>
+    <tr>
+      <td class="label">PERIODO:</td>
+      <td class="value">
+        {% if datos.periodo_desde %}
+          365 DÍAS. DESDE EL {{ datos.periodo_desde }} HASTA EL {{ datos.periodo_hasta }}
+        {% else %}
+          —
+        {% endif %}
+      </td>
+    </tr>
+    <tr>
+      <td class="label">DETALLE DEL SINIESTRO:</td>
+      <td class="value">{{ datos.detalle_siniestro|default:"—" }}</td>
+    </tr>
+    <tr>
+      <td class="label">LUGAR DEL SINIESTRO:</td>
+      <td class="value">{{ datos.lugar_siniestro|default:"—" }}</td>
+    </tr>
+    <tr>
+      <td class="label">VEHÍCULO ASEGURADO:</td>
+      <td class="value">
+        {% with v=datos.vehiculo_asegurado %}
+          {% if v.marca %}
+            {{ v.marca }} {{ v.modelo }}, año {{ v.año }}, color {{ v.color }},
+            Chapa N° {{ v.matricula }}
+            {% if v.vin %}, VIN N° {{ v.vin }}{% endif %}
+          {% else %}
+            —
+          {% endif %}
+        {% endwith %}
+      </td>
+    </tr>
+    <tr>
+      <td class="label">CONDUCTOR ASEGURADO:</td>
+      <td class="value">
+        {% with c=datos.conductor_asegurado %}
+          {% if c.nombre %}
+            {{ c.nombre }}{% if c.ci %} C.I. N° {{ c.ci }}{% endif %}
+          {% else %}
+            —
+          {% endif %}
+        {% endwith %}
+      </td>
+    </tr>
+    {% if datos.vehiculo_tercero %}
+    <tr>
+      <td class="label">VEHÍCULO TERCERO:</td>
+      <td class="value">
+        {% with v=datos.vehiculo_tercero %}
+          {{ v.marca }} {{ v.modelo }}, año {{ v.año }}, color {{ v.color }},
+          Matrícula N° {{ v.matricula }}
+        {% endwith %}
+      </td>
+    </tr>
+    <tr>
+      <td class="label">CONDUCTOR TERCERO:</td>
+      <td class="value">
+        {% with c=datos.conductor_tercero %}
+          {% if c.nombre %}
+            {{ c.nombre }}{% if c.ci %} C.I. N° {{ c.ci }}{% endif %}
+          {% else %}
+            —
+          {% endif %}
+        {% endwith %}
+      </td>
+    </tr>
+    {% endif %}
+    <tr>
+      <td class="label">FECHA DEL SINIESTRO:</td>
+      <td class="value">{{ datos.fecha_siniestro|default:"—" }}</td>
+    </tr>
+    <tr>
+      <td class="label">FECHA DE DENUNCIA:</td>
+      <td class="value">{{ datos.fecha_denuncia|default:"—" }}</td>
+    </tr>
+    <tr>
+      <td class="label">FECHA DE DESIGNACIÓN:</td>
+      <td class="value">{{ datos.fecha_designacion|default:"—" }}</td>
+    </tr>
+    <tr>
+      <td class="label">ÚLTIMA DOCUMENTACIÓN:</td>
+      <td class="value">{{ datos.ultima_documentacion|default:"—" }}</td>
+    </tr>
+    <tr>
+      <td class="label">INDEMNIZACIÓN AL ASEGURADO:</td>
+      <td class="value">
+        {% if datos.corresponde_indemnizar_asegurado %}
+          <span class="badge-si">CORRESPONDE INDEMNIZAR.-</span>
+          <ul style="margin-top:4px; padding-left:18px;">
+            {% if datos.estimacion_danios_materiales %}
+              <li>Estimación <span class="monto-estimado">{{ datos.estimacion_danios_materiales }}</span> para Daños Materiales</li>
+            {% endif %}
+            {% if datos.estimacion_gastos_medicos %}
+              <li>Estimación <span class="monto-estimado">{{ datos.estimacion_gastos_medicos }}</span> para Gastos Médicos</li>
+            {% endif %}
+            {% if datos.razon_cobertura_asegurado %}
+              <li style="font-size:9pt; color:#555;">{{ datos.razon_cobertura_asegurado }}</li>
+            {% endif %}
+          </ul>
+        {% else %}
+          <span class="badge-no">NO CORRESPONDE.-</span>
+        {% endif %}
+      </td>
+    </tr>
+    <tr>
+      <td class="label">INDEMNIZACIÓN AL TERCERO:</td>
+      <td class="value">
+        {% if datos.corresponde_indemnizar_tercero %}
+          <span class="badge-si">CORRESPONDE.-</span>
+          {% if datos.exposicion_maxima_rc %}
+            <ul style="margin-top:4px; padding-left:18px;">
+              <li>Exposición máxima por RC: <span class="monto-estimado">{{ datos.exposicion_maxima_rc }}</span></li>
+            </ul>
+          {% endif %}
+        {% else %}
+          <span class="badge-no">NO CORRESPONDE.-</span>
+          {% if datos.exposicion_maxima_rc %}
+            <ul style="margin-top:4px; padding-left:18px;">
+              <li>Exposición máxima por RC en caso de aceptación de cobertura: <span class="monto-estimado">{{ datos.exposicion_maxima_rc }}</span></li>
+            </ul>
+          {% endif %}
+          {% if datos.razon_no_cobertura_tercero %}
+            <p style="margin-top:4px; font-size:9pt; color:#555;">{{ datos.razon_no_cobertura_tercero }}</p>
+          {% endif %}
+        {% endif %}
+      </td>
+    </tr>
+  </table>
+
+  <!-- ================================================================
+       DOCUMENTACIONES COMPLEMENTARIAS
+  ================================================================ -->
+  <h2 class="seccion">Documentaciones Complementarias</h2>
+  <ul class="doc-list">
+    {% for doc in datos.documentacion_complementaria %}
+      <li>
+        {{ doc.nombre }}:
+        {% if doc.estado == "ENTREGADO" %}
+          <span class="estado-si">ENTREGADO</span>
+        {% else %}
+          <span class="estado-no">NO ENTREGADO</span>
+        {% endif %}
+      </li>
+    {% empty %}
+      <li>Sin información de documentación.</li>
+    {% endfor %}
+  </ul>
+
+  {% if datos.actuaciones %}
+  <!-- ================================================================
+       ACTUACIONES
+  ================================================================ -->
+  <h2 class="seccion">Actuaciones</h2>
+  <ul class="actuaciones-list">
+    {% for act in datos.actuaciones %}
+      <li>
+        <span class="fecha-act">{{ act.fecha }}:</span> {{ act.descripcion }}
+      </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  <!-- ================================================================
+       ALERTAS DEL LIQUIDADOR
+  ================================================================ -->
+  {% if datos.alertas_liquidador %}
+  <div class="alertas-box">
+    <strong>⚠ Alertas para el Liquidador:</strong>
+    <ul>
+      {% for alerta in datos.alertas_liquidador %}
+        <li>{{ alerta }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  <!-- ================================================================
+       CONTRATO DE SEGURO — COBERTURAS AFECTADAS
+  ================================================================ -->
+  <div class="pagina"></div>
+
+  <div class="header">
+    <div class="header-left">SISTEMA DE LIQUIDACIÓN — CASO: {{ datos.caso_id }}</div>
+    <div class="header-right">LIQUIDADOR<br><span>DE SINIESTROS</span></div>
+  </div>
+
+  <h2 class="seccion">Contrato de Seguro — Coberturas Afectadas</h2>
+
+  {% for cob in datos.coberturas_afectadas %}
+    <div class="cobertura-block">
+      <div class="cap-titulo">Capítulo "{{ cob.capitulo }}" — {{ cob.titulo }}</div>
+      <ul>
+        {% for item in cob.items %}
+          <li>{{ item }}{% if cob.monto_usd %} hasta la suma máxima de <strong>{{ cob.monto_usd }}</strong>{% endif %}</li>
+        {% endfor %}
+      </ul>
+    </div>
+  {% empty %}
+    <p>Sin información de coberturas disponible.</p>
+  {% endfor %}
+
+  <h3 class="subseccion">Franquicia</h3>
+  <p>{{ datos.franquicia }}</p>
+
+  {% if datos.exposicion_maxima_total %}
+  <div class="exposicion-maxima">
+    Siendo la exposición máxima para las coberturas afectadas, la suma de
+    {{ datos.exposicion_maxima_total }}
+  </div>
+  {% endif %}
+
+  <!-- ================================================================
+       DINÁMICA DEL SINIESTRO
+  ================================================================ -->
+  {% if datos.dinamica_siniestro %}
+  <h2 class="seccion">Dinámica del Siniestro</h2>
+  <div class="narrativo">
+    {% for parrafo in datos.dinamica_siniestro|splitlines %}
+      {% if parrafo %}<p>{{ parrafo }}</p>{% endif %}
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <!-- ================================================================
+       CONCLUSIÓN PERICIAL
+  ================================================================ -->
+  {% if datos.conclusion_pericial %}
+  <div class="pagina"></div>
+
+  <div class="header">
+    <div class="header-left">SISTEMA DE LIQUIDACIÓN — CASO: {{ datos.caso_id }}</div>
+    <div class="header-right">LIQUIDADOR<br><span>DE SINIESTROS</span></div>
+  </div>
+
+  <h2 class="seccion">Conclusión Pericial</h2>
+  <div class="narrativo">
+    {% for parrafo in datos.conclusion_pericial|splitlines %}
+      {% if parrafo %}<p>{{ parrafo }}</p>{% endif %}
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <!-- Responsabilidad -->
+  {% if datos.responsabilidad_conclusion %}
+  <div style="border:1px solid #1a3a6b; padding:8px 12px; margin-bottom:12px; font-size:9.5pt;">
+    <strong>Conclusión sobre responsabilidad:</strong><br>
+    {{ datos.responsabilidad_conclusion }}
+  </div>
+  {% endif %}
+
+  <!-- ================================================================
+       ANÁLISIS DE COBERTURA — NORMAS LEGALES
+  ================================================================ -->
+  {% if datos.infracciones_detectadas %}
+  <h2 class="seccion">Infracciones Detectadas y Normas Afectadas</h2>
+  <ul class="infracciones-list">
+    {% for inf in datos.infracciones_detectadas %}
+      <li>
+        <span class="infractor-label">[{{ inf.infractor }}]</span>
+        {{ inf.descripcion_infraccion }}<br>
+        {% if inf.articulo_ley_5016 %}
+          <em>→ {{ inf.articulo_ley_5016 }} (Ley N° 5016/14)</em><br>
+        {% endif %}
+        {% if inf.articulo_ordenanza %}
+          <em>→ {{ inf.articulo_ordenanza }}</em>
+        {% endif %}
+      </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  <!-- ================================================================
+       RESULTADO FINAL
+  ================================================================ -->
+  <h2 class="seccion">Resultado del Análisis</h2>
+  <table class="datos">
+    <tr>
+      <td class="label">RESPONSABILIDAD SUGERIDA:</td>
+      <td class="value"><strong>{{ datos.responsabilidad_sugerida }}</strong>
+        {% if datos.porcentaje_asegurado is not None %}
+          (Asegurado {{ datos.porcentaje_asegurado }}% / Tercero {{ datos.porcentaje_tercero }}%)
+        {% endif %}
+      </td>
+    </tr>
+    <tr>
+      <td class="label">COBERTURA APLICA:</td>
+      <td class="value"><strong>{{ datos.cobertura_aplica|upper }}</strong></td>
+    </tr>
+    <tr>
+      <td class="label">FRANQUICIA APLICA:</td>
+      <td class="value">{% if datos.franquicia_aplica %}SÍ{% else %}NO{% endif %}</td>
+    </tr>
+    {% if datos.monto_sugerido_liquidar %}
+    <tr>
+      <td class="label">MONTO SUGERIDO A LIQUIDAR:</td>
+      <td class="value"><strong class="monto-estimado">{{ datos.monto_sugerido_liquidar }}</strong></td>
+    </tr>
+    {% endif %}
+    <tr>
+      <td class="label">CONFIANZA DEL DICTAMEN:</td>
+      <td class="value">{{ datos.confianza_dictamen }}</td>
+    </tr>
+  </table>
+
+  <!-- Conflictos entre documentos -->
+  {% if datos.conflictos %}
+  <h3 class="subseccion">Conflictos Detectados Entre Documentos</h3>
+  <ul class="doc-list" style="color:#b10000;">
+    {% for c in datos.conflictos %}
+      <li>
+        <strong>{{ c.campo }}:</strong> {{ c.descripcion }}
+        (Doc 1: {{ c.valor_doc_1 }} | Doc 2: {{ c.valor_doc_2 }})
+      </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  <!-- ================================================================
+       NOTA FINAL
+  ================================================================ -->
+  <div class="nota-final">
+    El presente Pre-Informe ha sido generado de forma automática por el sistema de inteligencia
+    artificial de liquidación de siniestros. No es vinculante para las partes. Su contenido es
+    una <strong>sugerencia</strong> sujeta a la aprobación y reconocimiento final de la aseguradora
+    solicitante, quien se reserva todos los derechos y obligaciones relacionados a este siniestro
+    y al contrato de seguros; y sin solidaridad entre sí.
+    <br><br>
+    Generado: {{ datos.generado_en }} | Caso: {{ datos.caso_id }}
+  </div>
+
+  <div class="firma-section">
+    <div class="firma-block">
+      <div class="linea-firma">
+        LIQUIDADOR DE SINIESTROS<br>
+        Sistema IA
+      </div>
+    </div>
+    <div class="firma-block">
+      <div class="linea-firma">
+        SOLICITANTE<br>
+        {{ datos.solicitante|default:"Aseguradora" }}
+      </div>
+    </div>
+  </div>
+
+</div><!-- /doc -->
+
+<button class="btn-print no-print" onclick="window.print()" style="margin-bottom:30px;">Imprimir / Guardar PDF</button>
+
+</body>
+</html>
