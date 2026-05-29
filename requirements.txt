@@ -1,0 +1,13 @@
+django
+djangorestframework
+gunicorn
+# Celery + broker
+celery[redis]
+redis
+# Pipeline IA
+google-generativeai
+python-dotenv
+# Extracción de texto de documentos
+pdfplumber
+python-docx
+odfpy
