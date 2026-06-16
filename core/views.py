@@ -97,8 +97,25 @@ def preinforme_view(request, pk):
     except RuntimeError as exc:
         return Response({'detail': str(exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
-    # 5. Generar DOCX y devolver como descarga
-    docx_bytes = generar_docx(datos)
+    # 5. Descargar logo si se proporcionó como query param
+    logo_bytes = None
+    logo_url = request.GET.get('logo_url')
+    if logo_url:
+        import urllib.request
+        try:
+            if not logo_url.startswith(('http://', 'https://')):
+                raise ValueError('URL de logo inválida')
+            req = urllib.request.Request(logo_url, headers={'User-Agent': 'liquidador/1.0'})
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                logo_bytes = resp.read()
+        except Exception as exc:
+            return Response(
+                {'detail': f'No se pudo obtener el logo: {exc}'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+    # 6. Generar DOCX y devolver como descarga
+    docx_bytes = generar_docx(datos, logo_bytes=logo_bytes)
     safe_caso_id = carpeta.caso_id.replace('/', '-').replace(' ', '_')
     filename = f'preinforme-{safe_caso_id}.docx'
     response = HttpResponse(

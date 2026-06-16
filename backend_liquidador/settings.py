@@ -79,8 +79,12 @@ WSGI_APPLICATION = 'backend_liquidador.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': os.environ.get('POSTGRES_DB', 'liquidador'),
+        'USER': os.environ.get('POSTGRES_USER', 'liquidador'),
+        'PASSWORD': os.environ.get('POSTGRES_PASSWORD', ''),
+        'HOST': os.environ.get('POSTGRES_HOST', 'db'),
+        'PORT': os.environ.get('POSTGRES_PORT', '5432'),
     }
 }
 
@@ -168,6 +172,16 @@ IMAP_PORT = int(os.environ.get('IMAP_PORT', '993'))
 IMAP_USER = os.environ.get('IMAP_USER', '')
 IMAP_PASSWORD = os.environ.get('IMAP_PASSWORD', '')
 IMAP_FOLDER = os.environ.get('IMAP_FOLDER', 'INBOX')
+IMAP_SUBJECT_FILTER = os.environ.get('IMAP_SUBJECT_FILTER', '')
+
+# Configuración SMTP (correo saliente para enviar pre-informes)
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = os.environ.get('EMAIL_HOST', 'smtp.gmail.com')
+EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '587'))
+EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'True') == 'True'
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', IMAP_USER)
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', IMAP_PASSWORD)
+DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', EMAIL_HOST_USER)
 
 
 # ---------------------------------------------------------------------------

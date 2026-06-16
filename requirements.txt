@@ -1,6 +1,8 @@
 django
 djangorestframework
 gunicorn
+# Base de datos
+psycopg2-binary
 # Celery + broker
 celery[redis]
 redis

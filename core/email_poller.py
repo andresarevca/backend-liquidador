@@ -61,6 +61,7 @@ def poll_emails() -> list[str]:
     user = getattr(settings, 'IMAP_USER', '')
     password = getattr(settings, 'IMAP_PASSWORD', '')
     folder = getattr(settings, 'IMAP_FOLDER', 'INBOX')
+    subject_filter = getattr(settings, 'IMAP_SUBJECT_FILTER', '')
 
     if not all([host, user, password]):
         logger.error("Configuración IMAP incompleta. Verifica IMAP_HOST, IMAP_USER, IMAP_PASSWORD.")
@@ -73,18 +74,53 @@ def poll_emails() -> list[str]:
         conn.login(user, password)
         conn.select(folder)
 
+        # Buscamos todos los correos no leídos de forma estándar.
+        # Descartamos la búsqueda compleja por "SUBJECT" en el servidor IMAP debido a incompatibilidades
+        # de sintaxis/codificación de cada proveedor (por ejemplo: Gmail/Outlook lanzan "Could not parse command").
         _, msg_ids_data = conn.search(None, 'UNSEEN')
+
         ids = msg_ids_data[0].split() if msg_ids_data[0] else []
-        logger.info(f"Emails no leídos encontrados: {len(ids)}")
+        logger.info(f"Emails no leídos encontrados en la bandeja de entrada: {len(ids)}")
 
         for msg_id in ids:
             try:
+                # 1. Si hay filtro de asunto, leemos de forma ultra-ligera sólo la cabecera (Subject)
+                # usando BODY.PEEK para no descargar adjuntos grandes ni marcar provisionalmente como leído.
+                if subject_filter:
+                    _, header_data = conn.fetch(msg_id, '(BODY.PEEK[HEADER.FIELDS (SUBJECT)])')
+                    if header_data and isinstance(header_data[0], tuple):
+                        header_msg = email.message_from_bytes(header_data[0][1])
+                        asunto_peek = _decodificar_header(header_msg.get('Subject', 'Sin asunto'))
+                        
+                        # Dividir el filtro en palabras clave para que la coincidencia sea flexible e insensible al orden
+                        palabras_filtro = [p.lower() for p in subject_filter.split() if p]
+                        asunto_lower = asunto_peek.lower()
+                        
+                        if not all(p in asunto_lower for p in palabras_filtro):
+                            logger.info(
+                                f"Ignorando correo id={msg_id.decode()} por filtro de asunto. "
+                                f"Asunto: '{asunto_peek}', Filtro requerido: '{subject_filter}'"
+                            )
+                            continue
+
+                # 2. Si coincide con el filtro (o no hay filtro), descargamos el email completo con sus adjuntos.
                 _, data = conn.fetch(msg_id, '(RFC822)')
+                if not data or not isinstance(data[0], tuple):
+                    logger.warning(f"Fetch vacío para msg_id={msg_id}")
+                    continue
+
                 raw_email = data[0][1]
                 msg = email.message_from_bytes(raw_email)
-
                 asunto = _decodificar_header(msg.get('Subject', 'Sin asunto'))
                 remitente = _decodificar_header(msg.get('From', ''))
+
+                # Aplicar filtro de asunto DESPUÉS de descargar
+                if subject_filter:
+                    palabras_filtro = [p.lower() for p in subject_filter.split() if p]
+                    if not all(p in asunto.lower() for p in palabras_filtro):
+                        logger.info(f"Ignorando correo por filtro. Asunto: '{asunto}'")
+                        continue
+
                 caso_id_base = _sanitizar_caso_id(asunto)
 
                 # Garantizar unicidad del caso_id
@@ -93,7 +129,8 @@ def poll_emails() -> list[str]:
                 while Carpeta.objects.filter(caso_id=caso_id).exists():
                     caso_id = f"{caso_id_base}-{suffix}"
                     suffix += 1
-
+                
+                
                 carpeta = Carpeta.objects.create(
                     caso_id=caso_id,
                     email_remitente=remitente[:500],
@@ -103,11 +140,21 @@ def poll_emails() -> list[str]:
 
                 adjuntos_guardados = 0
                 for part in msg.walk():
-                    content_disposition = part.get('Content-Disposition', '')
-                    if 'attachment' not in content_disposition:
-                        continue
+                    content_disposition = part.get('Content-Disposition', '') or ''
+                    # Solo procesamos partes que son adjuntos (attachment) o inline con filename, para evitar falsos positivos en partes del cuerpo del email.
+                    filename_raw = (
+                        part.get_filename()
+                        or part.get_param('name', header='content-type')
+                        or part.get_param('name')
+                    )
 
-                    filename_raw = part.get_filename()
+                    logger.info(
+                        f"PART >> type={part.get_content_type()!r} | "
+                        f"disposition={content_disposition!r} | "
+                        f"get_filename={filename_raw!r} | "
+                        f"name_param={part.get_param('name', header='content-type')!r}"
+                    )
+
                     if not filename_raw:
                         continue
 
@@ -136,7 +183,7 @@ def poll_emails() -> list[str]:
 
                 if adjuntos_guardados == 0:
                     carpeta.estado = 'ERROR'
-                    carpeta.mensaje_error = 'El correo no contenía adjuntos con extensión válida (pdf, jpg, png, docx, odt, txt).'
+                    carpeta.mensaje_error = 'El correo no contenía adjuntos con extensión válida (pdf, jpg, jepg, png, docx, odt, txt).'
                     carpeta.save(update_fields=['estado', 'mensaje_error'])
                     logger.warning(f"Carpeta {caso_id}: sin adjuntos válidos, no se procesa.")
                 else:

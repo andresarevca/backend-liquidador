@@ -85,7 +85,7 @@ def _add_data_row(table, label: str, value: str) -> None:
     p_val = cell_val.paragraphs[0]
     p_val.paragraph_format.space_before = Pt(2)
     p_val.paragraph_format.space_after = Pt(2)
-    run2 = p_val.add_run(str(value) if value else "—")
+    run2 = p_val.add_run("" if value is None or str(value) in ("", "None") else str(value))
     run2.font.name = "Arial"
     run2.font.size = Pt(9)
 
@@ -103,6 +103,15 @@ def _bullet(doc: Document, text: str, color=None) -> None:
     run.font.size = Pt(9.5)
     if color:
         run.font.color.rgb = color
+
+
+def _bool_es(val) -> str:
+    """Convierte un booleano (o string 'true'/'false') a 'SÍ' / 'NO'."""
+    if val is None:
+        return ""
+    if isinstance(val, bool):
+        return "SÍ" if val else "NO"
+    return "NO" if str(val).upper().strip() in ("FALSE", "NO", "0") else "SÍ"
 
 
 def _fmt_vehiculo(v: dict) -> str:
@@ -135,12 +144,12 @@ def _fmt_conductor(c: dict) -> str:
 # Función principal
 # ---------------------------------------------------------------------------
 
-def generar_docx(datos: dict) -> bytes:
+def generar_docx(datos: dict, logo_bytes: bytes | None = None) -> bytes:
     """
     Recibe el dict de `generar_datos_preinforme()` y devuelve los bytes del DOCX.
 
     Usage:
-        docx_bytes = generar_docx(datos)
+        docx_bytes = generar_docx(datos, logo_bytes=<imagen en bytes>)
         HttpResponse(docx_bytes, content_type='application/vnd.openxmlformats-...')
     """
     doc = Document()
@@ -160,6 +169,13 @@ def generar_docx(datos: dict) -> bytes:
     style_normal.font.size = Pt(10)
 
     caso_id = datos.get("caso_id", "")
+
+    # ====================================================================
+    # LOGO (opcional)
+    # ====================================================================
+    if logo_bytes:
+        doc.add_picture(io.BytesIO(logo_bytes), height=Cm(2))
+        doc.paragraphs[-1].alignment = WD_ALIGN_PARAGRAPH.RIGHT
 
     # ====================================================================
     # CABECERA
@@ -317,11 +333,6 @@ def generar_docx(datos: dict) -> bytes:
         for alerta in alertas:
             _bullet(doc, alerta, color=NARANJA)
 
-    # ====================================================================
-    # SALTO DE PÁGINA — CONTRATO DE SEGURO
-    # ====================================================================
-    doc.add_page_break()
-
     _heading(doc, "Contrato de Seguro — Coberturas Afectadas")
 
     coberturas = datos.get("coberturas_afectadas") or []
@@ -361,12 +372,8 @@ def generar_docx(datos: dict) -> bytes:
         r_exp.font.size = Pt(11)
         r_exp.font.color.rgb = ROJO
 
-    # ====================================================================
-    # SALTO DE PÁGINA — DINÁMICA DEL SINIESTRO
-    # ====================================================================
     dinamica = datos.get("dinamica_siniestro", "")
     if dinamica:
-        doc.add_page_break()
         _heading(doc, "Dinámica del Siniestro")
         for linea in dinamica.split("\n"):
             linea = linea.strip()
@@ -375,12 +382,8 @@ def generar_docx(datos: dict) -> bytes:
                 p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
                 p.paragraph_format.space_after = Pt(6)
 
-    # ====================================================================
-    # SALTO DE PÁGINA — CONCLUSIÓN PERICIAL
-    # ====================================================================
     conclusion = datos.get("conclusion_pericial", "")
     if conclusion:
-        doc.add_page_break()
         _heading(doc, "Conclusión Pericial")
         for linea in conclusion.split("\n"):
             linea = linea.strip()
@@ -442,16 +445,16 @@ def generar_docx(datos: dict) -> bytes:
 
     porc_a = datos.get("porcentaje_asegurado")
     porc_t = datos.get("porcentaje_tercero")
-    resp_str = datos.get("responsabilidad_sugerida", "")
+    resp_str = datos.get("responsabilidad_sugerida") or ""
     if porc_a is not None:
         resp_str += f" (Asegurado {porc_a}% / Tercero {porc_t}%)"
 
     result_rows = [
         ("RESPONSABILIDAD SUGERIDA:", resp_str),
-        ("COBERTURA APLICA:", str(datos.get("cobertura_aplica", "")).upper()),
+        ("COBERTURA APLICA:", _bool_es(datos.get("cobertura_aplica"))),
         ("FRANQUICIA APLICA:", "SÍ" if datos.get("franquicia_aplica") else "NO"),
-        ("MONTO SUGERIDO A LIQUIDAR:", datos.get("monto_sugerido_liquidar") or "—"),
-        ("CONFIANZA DEL DICTAMEN:", str(datos.get("confianza_dictamen", ""))),
+        ("MONTO SUGERIDO A LIQUIDAR:", datos.get("monto_sugerido_liquidar") or ""),
+        ("CONFIANZA DEL DICTAMEN:", str(datos.get("confianza_dictamen") or "")),
     ]
     for label, value in result_rows:
         _add_data_row(tbl2, label, value)
@@ -460,7 +463,7 @@ def generar_docx(datos: dict) -> bytes:
         row.cells[1].width = Cm(11)
 
     # Conflictos
-    conflictos = datos.get("conflictos") or []
+    conflictos = [c for c in (datos.get("conflictos") or []) if c.get("descripcion")]
     if conflictos:
         _heading(doc, "Conflictos Detectados Entre Documentos", level=2)
         for c in conflictos:
@@ -469,24 +472,6 @@ def generar_docx(datos: dict) -> bytes:
             r_lbl_c.bold = True
             r_lbl_c.font.color.rgb = ROJO
             p_c.add_run(c.get("descripcion", ""))
-
-    # ====================================================================
-    # NOTA FINAL
-    # ====================================================================
-    doc.add_paragraph()
-    p_nota = doc.add_paragraph()
-    p_nota.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-    p_nota.paragraph_format.space_before = Pt(10)
-    r_nota = p_nota.add_run(
-        "El presente Pre-Informe ha sido generado de forma automática por el sistema de inteligencia "
-        "artificial de liquidación de siniestros. No es vinculante para las partes. Su contenido es una "
-        "sugerencia sujeta a la aprobación y reconocimiento final de la aseguradora solicitante, quien se "
-        "reserva todos los derechos y obligaciones relacionados a este siniestro y al contrato de seguros; "
-        "y sin solidaridad entre sí."
-    )
-    r_nota.font.size = Pt(8)
-    r_nota.italic = True
-    r_nota.font.color.rgb = GRIS
 
     # ====================================================================
     # BLOQUE DE FIRMA
