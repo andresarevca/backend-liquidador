@@ -1,13 +1,30 @@
 from rest_framework import generics, status
 from rest_framework.decorators import api_view
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+from rest_framework_simplejwt.views import TokenObtainPairView
 
-from .models import Carpeta, ResultadoIA
+from .models import Carpeta, Documento, ResultadoIA
 from .serializers import (
     CarpetaDetailSerializer,
     CarpetaListSerializer,
+    DocumentoConCarpetaSerializer,
+    EmailOrUsernameTokenObtainPairSerializer,
     ResultadoIASerializer,
+    UserMeSerializer,
 )
+
+
+class LoginView(TokenObtainPairView):
+    """Login con username o email + password. Devuelve par de tokens JWT (access/refresh)."""
+    permission_classes = [AllowAny]
+    serializer_class = EmailOrUsernameTokenObtainPairSerializer
+
+
+@api_view(['GET'])
+def me_view(request):
+    """Datos del usuario autenticado (nombre, email, rol)."""
+    return Response(UserMeSerializer(request.user).data)
 
 
 class CarpetaListView(generics.ListAPIView):
@@ -21,6 +38,12 @@ class CarpetaDetailView(generics.RetrieveAPIView):
     queryset = Carpeta.objects.prefetch_related('documentos', 'resultados')
     serializer_class = CarpetaDetailSerializer
     lookup_field = 'pk'
+
+
+class DocumentoListView(generics.ListAPIView):
+    """Biblioteca global de documentos recibidos en todas las carpetas."""
+    queryset = Documento.objects.select_related('carpeta').order_by('-subido_en')
+    serializer_class = DocumentoConCarpetaSerializer
 
 
 @api_view(['GET'])

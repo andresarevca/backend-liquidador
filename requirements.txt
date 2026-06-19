@@ -1,5 +1,6 @@
 django
 djangorestframework
+djangorestframework-simplejwt
 gunicorn
 # Base de datos
 psycopg2-binary
