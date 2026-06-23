@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from rest_framework import generics, status
 from rest_framework.decorators import api_view
 from rest_framework.permissions import AllowAny
@@ -9,6 +11,7 @@ from .serializers import (
     CarpetaDetailSerializer,
     CarpetaListSerializer,
     DocumentoConCarpetaSerializer,
+    DocumentoSerializer,
     EmailOrUsernameTokenObtainPairSerializer,
     ResultadoIASerializer,
     UserMeSerializer,
@@ -57,6 +60,63 @@ def dictamen_view(request, pk):
             {'detail': 'El dictamen aún no está disponible para esta carpeta.'},
             status=status.HTTP_404_NOT_FOUND,
         )
+
+
+@api_view(['POST'])
+def subir_documentos_view(request, pk):
+    """
+    Sube uno o más documentos faltantes a una carpeta existente.
+
+    POST /api/carpetas/<uuid>/documentos/  (multipart/form-data: archivos[])
+    No relanza el pipeline automáticamente; usar luego /reprocesar/.
+    """
+    from core.email_poller import EXTENSIONES_PERMITIDAS
+
+    try:
+        carpeta = Carpeta.objects.get(pk=pk)
+    except Carpeta.DoesNotExist:
+        return Response({'detail': 'Carpeta no encontrada.'}, status=status.HTTP_404_NOT_FOUND)
+
+    archivos = request.FILES.getlist('archivos')
+    if not archivos:
+        return Response(
+            {'detail': 'Debe adjuntar al menos un archivo en el campo "archivos".'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    creados = []
+    rechazados = []
+    for archivo in archivos:
+        ext = Path(archivo.name).suffix.lower()
+        if ext not in EXTENSIONES_PERMITIDAS:
+            rechazados.append(archivo.name)
+            continue
+        documento = Documento(
+            carpeta=carpeta,
+            nombre_archivo=archivo.name,
+            formato=ext.lstrip('.').upper(),
+        )
+        documento.archivo.save(archivo.name, archivo, save=True)
+        creados.append(documento)
+
+    if not creados:
+        return Response(
+            {
+                'detail': (
+                    'Ningún archivo tiene una extensión válida '
+                    f'({", ".join(sorted(EXTENSIONES_PERMITIDAS))}).'
+                ),
+            },
+            status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        )
+
+    return Response(
+        {
+            'documentos': DocumentoSerializer(creados, many=True).data,
+            'rechazados': rechazados,
+        },
+        status=status.HTTP_201_CREATED,
+    )
 
 
 @api_view(['POST'])
@@ -147,3 +207,64 @@ def preinforme_view(request, pk):
     )
     response['Content-Disposition'] = f'attachment; filename="{filename}"'
     return response
+
+
+@api_view(['GET'])
+def corpus_buscar_view(request):
+    """
+    Búsqueda semántica en el corpus legal (leyes y ordenanzas indexadas).
+
+    GET /api/corpus/buscar/?q=...&municipio=...&n=6
+    """
+    from core.ia_client import buscar_corpus
+
+    q = request.GET.get('q', '').strip()
+    if len(q) < 3:
+        return Response(
+            {'detail': 'El parámetro "q" debe tener al menos 3 caracteres.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    municipio = request.GET.get('municipio') or None
+    n = int(request.GET.get('n', 6))
+
+    try:
+        data = buscar_corpus(q, municipio=municipio, n=n)
+    except RuntimeError as exc:
+        return Response({'detail': str(exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+    return Response(data)
+
+
+@api_view(['GET'])
+def corpus_fuentes_view(request):
+    """Lista los documentos legales indexados y estadísticas del corpus."""
+    from core.ia_client import listar_fuentes_corpus
+
+    try:
+        data = listar_fuentes_corpus()
+    except RuntimeError as exc:
+        return Response({'detail': str(exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+    return Response(data)
+
+
+@api_view(['POST'])
+def corpus_indexar_pdf_view(request):
+    """
+    Sube e indexa un PDF de ordenanza municipal en el corpus legal.
+
+    POST /api/corpus/indexar-pdf/  (multipart/form-data: archivo, municipio)
+    """
+    from core.ia_client import indexar_pdf_corpus
+
+    archivo = request.FILES.get('archivo')
+    if not archivo or not archivo.name.lower().endswith('.pdf'):
+        return Response(
+            {'detail': 'Debe adjuntar un archivo PDF en el campo "archivo".'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    municipio = request.POST.get('municipio', 'Nacional')
+
+    try:
+        data = indexar_pdf_corpus(archivo, archivo.name, municipio)
+    except RuntimeError as exc:
+        return Response({'detail': str(exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+    return Response(data)
