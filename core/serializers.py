@@ -1,4 +1,5 @@
 from django.contrib.auth import get_user_model
+from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
@@ -33,6 +34,26 @@ class UserMeSerializer(serializers.ModelSerializer):
 
     def get_rol(self, obj):
         return 'Admin' if obj.is_staff or obj.is_superuser else 'Liquidador'
+
+
+class CambiarPasswordSerializer(serializers.Serializer):
+    password_actual = serializers.CharField(write_only=True)
+    password_nueva = serializers.CharField(write_only=True)
+
+    def validate_password_actual(self, value):
+        if not self.context['request'].user.check_password(value):
+            raise serializers.ValidationError('La contraseña actual no es correcta.')
+        return value
+
+    def validate_password_nueva(self, value):
+        validate_password(value, user=self.context['request'].user)
+        return value
+
+    def save(self):
+        user = self.context['request'].user
+        user.set_password(self.validated_data['password_nueva'])
+        user.save(update_fields=['password'])
+        return user
 
 
 class DocumentoSerializer(serializers.ModelSerializer):

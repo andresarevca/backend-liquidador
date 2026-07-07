@@ -1,12 +1,14 @@
-from django.urls import path
+from django.urls import include, path
 from rest_framework_simplejwt.views import TokenRefreshView
 
 from . import views
 
 urlpatterns = [
+    path('admin/', include('core.admin_urls')),
     path('auth/login/', views.LoginView.as_view(), name='auth-login'),
     path('auth/refresh/', TokenRefreshView.as_view(), name='auth-refresh'),
     path('auth/me/', views.me_view, name='auth-me'),
+    path('auth/cambiar-password/', views.cambiar_password_view, name='auth-cambiar-password'),
     path('documentos/', views.DocumentoListView.as_view(), name='documento-list'),
     path('carpetas/', views.CarpetaListView.as_view(), name='carpeta-list'),
     path('carpetas/<uuid:pk>/', views.CarpetaDetailView.as_view(), name='carpeta-detail'),

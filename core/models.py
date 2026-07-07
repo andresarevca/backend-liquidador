@@ -1,5 +1,6 @@
 import uuid
 
+from django.conf import settings
 from django.db import models
 
 
@@ -13,6 +14,14 @@ class Carpeta(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     caso_id = models.CharField(max_length=200, unique=True)
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='carpetas',
+        help_text='Usuario del sistema al que se asignó la carpeta (resuelto por el email del remitente).',
+    )
     email_remitente = models.CharField(max_length=500)
     email_asunto = models.CharField(max_length=500)
     estado = models.CharField(max_length=20, choices=ESTADO_CHOICES, default='RECIBIDA')
@@ -25,6 +34,21 @@ class Carpeta(models.Model):
 
     def __str__(self):
         return f"{self.caso_id} ({self.estado})"
+
+
+class CorreoRechazado(models.Model):
+    """Registro de correos entrantes ignorados por no provenir de un usuario del sistema."""
+
+    email_remitente = models.CharField(max_length=500)
+    email_asunto = models.CharField(max_length=500)
+    motivo = models.CharField(max_length=200)
+    recibido_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-recibido_en']
+
+    def __str__(self):
+        return f"{self.email_remitente} — {self.motivo}"
 
 
 class Documento(models.Model):

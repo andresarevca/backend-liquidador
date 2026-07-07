@@ -8,6 +8,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 
 from .models import Carpeta, Documento, ResultadoIA
 from .serializers import (
+    CambiarPasswordSerializer,
     CarpetaDetailSerializer,
     CarpetaListSerializer,
     DocumentoConCarpetaSerializer,
@@ -30,30 +31,49 @@ def me_view(request):
     return Response(UserMeSerializer(request.user).data)
 
 
+@api_view(['POST'])
+def cambiar_password_view(request):
+    """Permite al usuario autenticado cambiar su propia contraseña."""
+    serializer = CambiarPasswordSerializer(data=request.data, context={'request': request})
+    serializer.is_valid(raise_exception=True)
+    serializer.save()
+    return Response({'detail': 'Contraseña actualizada correctamente.'})
+
+
 class CarpetaListView(generics.ListAPIView):
-    """Lista todas las carpetas ordenadas por fecha de recepción (más reciente primero)."""
-    queryset = Carpeta.objects.all()
+    """Lista las carpetas del usuario autenticado, ordenadas por fecha de recepción (más reciente primero)."""
     serializer_class = CarpetaListSerializer
+
+    def get_queryset(self):
+        return Carpeta.objects.filter(usuario=self.request.user)
 
 
 class CarpetaDetailView(generics.RetrieveAPIView):
-    """Detalle de una carpeta con sus documentos y resultados IA."""
-    queryset = Carpeta.objects.prefetch_related('documentos', 'resultados')
+    """Detalle de una carpeta del usuario autenticado, con sus documentos y resultados IA."""
     serializer_class = CarpetaDetailSerializer
     lookup_field = 'pk'
 
+    def get_queryset(self):
+        return Carpeta.objects.filter(usuario=self.request.user).prefetch_related('documentos', 'resultados')
+
 
 class DocumentoListView(generics.ListAPIView):
-    """Biblioteca global de documentos recibidos en todas las carpetas."""
-    queryset = Documento.objects.select_related('carpeta').order_by('-subido_en')
+    """Biblioteca de documentos recibidos en las carpetas del usuario autenticado."""
     serializer_class = DocumentoConCarpetaSerializer
+
+    def get_queryset(self):
+        return (
+            Documento.objects.filter(carpeta__usuario=self.request.user)
+            .select_related('carpeta')
+            .order_by('-subido_en')
+        )
 
 
 @api_view(['GET'])
 def dictamen_view(request, pk):
     """Devuelve el dictamen (Paso C) de una carpeta específica."""
     try:
-        resultado = ResultadoIA.objects.get(carpeta__pk=pk, paso='C')
+        resultado = ResultadoIA.objects.get(carpeta__pk=pk, carpeta__usuario=request.user, paso='C')
         return Response(ResultadoIASerializer(resultado).data)
     except ResultadoIA.DoesNotExist:
         return Response(
@@ -73,7 +93,7 @@ def subir_documentos_view(request, pk):
     from core.email_poller import EXTENSIONES_PERMITIDAS
 
     try:
-        carpeta = Carpeta.objects.get(pk=pk)
+        carpeta = Carpeta.objects.get(pk=pk, usuario=request.user)
     except Carpeta.DoesNotExist:
         return Response({'detail': 'Carpeta no encontrada.'}, status=status.HTTP_404_NOT_FOUND)
 
@@ -123,7 +143,7 @@ def subir_documentos_view(request, pk):
 def reprocesar_view(request, pk):
     """Vuelve a lanzar el pipeline IA para una carpeta existente."""
     try:
-        carpeta = Carpeta.objects.get(pk=pk)
+        carpeta = Carpeta.objects.get(pk=pk, usuario=request.user)
     except Carpeta.DoesNotExist:
         return Response({'detail': 'Carpeta no encontrada.'}, status=status.HTTP_404_NOT_FOUND)
 
@@ -151,7 +171,7 @@ def preinforme_view(request, pk):
 
     # 1. Obtener carpeta
     try:
-        carpeta = Carpeta.objects.prefetch_related('documentos').get(pk=pk)
+        carpeta = Carpeta.objects.prefetch_related('documentos').get(pk=pk, usuario=request.user)
     except Carpeta.DoesNotExist:
         return Response({'detail': 'Carpeta no encontrada.'}, status=status.HTTP_404_NOT_FOUND)
 

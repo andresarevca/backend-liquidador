@@ -52,9 +52,17 @@ def poll_emails() -> list[str]:
     """
     Recupera correos no leídos del servidor IMAP y crea registros en la BD.
 
+    Solo se procesan correos cuyo remitente coincide con el email de un usuario
+    activo del sistema; el resto se ignora (se marca como leído y se registra en
+    CorreoRechazado, sin crear Carpeta).
+
     Retorna lista de PKs (str) de las Carpeta recién creadas.
     """
-    from core.models import Carpeta, Documento  # import local para evitar ciclos
+    from django.contrib.auth import get_user_model
+
+    from core.models import Carpeta, CorreoRechazado, Documento  # import local para evitar ciclos
+
+    User = get_user_model()
 
     host = getattr(settings, 'IMAP_HOST', '')
     port = getattr(settings, 'IMAP_PORT', 993)
@@ -121,6 +129,25 @@ def poll_emails() -> list[str]:
                         logger.info(f"Ignorando correo por filtro. Asunto: '{asunto}'")
                         continue
 
+                # Solo se procesan correos de remitentes que son usuarios registrados del sistema.
+                _, direccion_remitente = email.utils.parseaddr(remitente)
+                usuario = (
+                    User.objects.filter(email__iexact=direccion_remitente, is_active=True).first()
+                    if direccion_remitente
+                    else None
+                )
+                if usuario is None:
+                    CorreoRechazado.objects.create(
+                        email_remitente=remitente[:500],
+                        email_asunto=asunto[:500],
+                        motivo='remitente no registrado como usuario del sistema',
+                    )
+                    logger.info(
+                        f"Correo ignorado: remitente '{remitente}' no es un usuario registrado."
+                    )
+                    conn.store(msg_id, '+FLAGS', '\\Seen')
+                    continue
+
                 caso_id_base = _sanitizar_caso_id(asunto)
 
                 # Garantizar unicidad del caso_id
@@ -133,6 +160,7 @@ def poll_emails() -> list[str]:
                 
                 carpeta = Carpeta.objects.create(
                     caso_id=caso_id,
+                    usuario=usuario,
                     email_remitente=remitente[:500],
                     email_asunto=asunto[:500],
                     estado='RECIBIDA',

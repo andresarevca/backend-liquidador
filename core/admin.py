@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Carpeta, Documento, ResultadoIA
+from .models import Carpeta, CorreoRechazado, Documento, ResultadoIA
 
 
 class DocumentoInline(admin.TabularInline):
@@ -17,11 +17,21 @@ class ResultadoIAInline(admin.TabularInline):
 
 @admin.register(Carpeta)
 class CarpetaAdmin(admin.ModelAdmin):
-    list_display = ['caso_id', 'email_remitente', 'estado', 'recibida_en', 'procesada_en']
+    list_display = ['caso_id', 'usuario', 'email_remitente', 'estado', 'recibida_en', 'procesada_en']
     list_filter = ['estado']
-    search_fields = ['caso_id', 'email_remitente', 'email_asunto']
+    search_fields = ['caso_id', 'email_remitente', 'email_asunto', 'usuario__email']
     readonly_fields = ['id', 'recibida_en', 'procesada_en']
     inlines = [DocumentoInline, ResultadoIAInline]
+
+
+@admin.register(CorreoRechazado)
+class CorreoRechazadoAdmin(admin.ModelAdmin):
+    list_display = ['email_remitente', 'motivo', 'recibido_en']
+    search_fields = ['email_remitente', 'email_asunto']
+    readonly_fields = ['email_remitente', 'email_asunto', 'motivo', 'recibido_en']
+
+    def has_add_permission(self, request):
+        return False
 
 
 @admin.register(Documento)
