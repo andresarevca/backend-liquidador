@@ -202,7 +202,9 @@ _SCHEMA_B = """{
     "fotos_evento_cantidad": 0, "cedula_verde_presente": false, "licencia_conductor_presente": false
   },
   "monto_danios": {"estimacion_pericia": null, "moneda_original": "PYG"},
-  "conflictos": [],
+  "conflictos": [
+    {"campo": "<nombre del campo>", "valor_doc_1": "<valor según documento A>", "valor_doc_2": "<valor según documento B>", "descripcion": "<explicación>"}
+  ],
   "calidad_extraccion": {"score": 0.0, "campos_faltantes_criticos": [], "observaciones": null}
 }"""
 
