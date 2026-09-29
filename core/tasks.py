@@ -16,23 +16,41 @@ from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
+POLL_EMAIL_LOCK_KEY = 'lock:poll_email_task'
+POLL_EMAIL_LOCK_TTL = 15 * 60  # segundos; red de seguridad si la tarea muere sin liberar el lock
+
 
 @shared_task(name='core.tasks.poll_email_task')
 def poll_email_task():
     """
     Tarea periódica ejecutada por Celery Beat.
     Recupera emails nuevos y lanza procesar_carpeta por cada uno.
+
+    Usa un lock en Redis para evitar que dos ejecuciones corran en paralelo
+    si una corrida anterior todavía no terminó cuando el beat dispara la siguiente.
     """
+    import redis
+
     from core.email_poller import poll_emails
 
-    logger.info("Iniciando poll de correos...")
-    carpetas_ids = poll_emails()
-    logger.info(f"Carpetas nuevas encontradas: {len(carpetas_ids)}")
+    client = redis.from_url(settings.CELERY_BROKER_URL)
+    lock_acquired = client.set(POLL_EMAIL_LOCK_KEY, '1', nx=True, ex=POLL_EMAIL_LOCK_TTL)
 
-    for pk in carpetas_ids:
-        procesar_carpeta.delay(pk)
+    if not lock_acquired:
+        logger.info("Poll de correos omitido: ya hay una ejecución en curso.")
+        return {'carpetas_encoladas': 0, 'omitido_por_lock': True}
 
-    return {'carpetas_encoladas': len(carpetas_ids)}
+    try:
+        logger.info("Iniciando poll de correos...")
+        carpetas_ids = poll_emails()
+        logger.info(f"Carpetas nuevas encontradas: {len(carpetas_ids)}")
+
+        for pk in carpetas_ids:
+            procesar_carpeta.delay(pk)
+
+        return {'carpetas_encoladas': len(carpetas_ids)}
+    finally:
+        client.delete(POLL_EMAIL_LOCK_KEY)
 
 
 @shared_task(name='core.tasks.procesar_carpeta', bind=True, max_retries=2)

@@ -109,6 +109,8 @@ def poll_emails() -> list[str]:
                                 f"Ignorando correo id={msg_id.decode()} por filtro de asunto. "
                                 f"Asunto: '{asunto_peek}', Filtro requerido: '{subject_filter}'"
                             )
+                            # Marcar como leído para no volver a escanearlo en el próximo poll.
+                            conn.store(msg_id, '+FLAGS', '\\Seen')
                             continue
 
                 # 2. Si coincide con el filtro (o no hay filtro), descargamos el email completo con sus adjuntos.
@@ -127,6 +129,7 @@ def poll_emails() -> list[str]:
                     palabras_filtro = [p.lower() for p in subject_filter.split() if p]
                     if not all(p in asunto.lower() for p in palabras_filtro):
                         logger.info(f"Ignorando correo por filtro. Asunto: '{asunto}'")
+                        conn.store(msg_id, '+FLAGS', '\\Seen')
                         continue
 
                 # Solo se procesan correos de remitentes que son usuarios registrados del sistema.
