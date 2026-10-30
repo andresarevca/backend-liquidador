@@ -26,5 +26,14 @@ jobs:
         with:
           context: .
           push: false
+          load: true
+          tags: backend-liquidador:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # Falla si hay cambios en los modelos sin su archivo de migracion.
+      # No necesita base de datos.
+      - name: Verificar migraciones pendientes
+        run: |
+          docker run --rm --entrypoint "" -e SECRET_KEY=ci -e DEBUG=False \
+            backend-liquidador:ci python manage.py makemigrations --check --dry-run
