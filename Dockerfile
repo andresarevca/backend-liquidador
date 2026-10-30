@@ -23,7 +23,7 @@ COPY . .
 # Collect static files
 RUN python manage.py collectstatic --noinput
 
-# Entrypoint: corre makemigrations + migrate antes de levantar el proceso
+# Entrypoint: corre migrate antes de levantar el proceso
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 ENTRYPOINT ["/entrypoint.sh"]
