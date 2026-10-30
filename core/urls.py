@@ -17,6 +17,7 @@ urlpatterns = [
     path('carpetas/<uuid:pk>/reprocesar/', views.reprocesar_view, name='carpeta-reprocesar'),
     path('carpetas/<uuid:pk>/preinforme/', views.preinforme_view, name='carpeta-preinforme'),
     path('corpus/buscar/', views.corpus_buscar_view, name='corpus-buscar'),
+    path('corpus/fuente/', views.corpus_eliminar_view, name='corpus-eliminar'),
     path('corpus/fuentes/', views.corpus_fuentes_view, name='corpus-fuentes'),
     path('corpus/indexar-pdf/', views.corpus_indexar_pdf_view, name='corpus-indexar-pdf'),
 ]
