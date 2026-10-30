@@ -1,0 +1,75 @@
+x-app: &app
+  image: ghcr.io/andresarevca/backend-liquidador:latest
+  env_file:
+    - .env
+  networks:
+    - backend_liquidador_network
+  restart: unless-stopped
+  depends_on:
+    redis:
+      condition: service_healthy
+    db:
+      condition: service_healthy
+
+services:
+
+  db:
+    image: postgres:16-alpine
+    container_name: liquidador_db
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - backend_liquidador_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: liquidador_redis
+    restart: unless-stopped
+    networks:
+      - backend_liquidador_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  web:
+    <<: *app
+    container_name: liquidador_web
+    command: gunicorn backend_liquidador.wsgi:application --bind 0.0.0.0:8000 --workers 3
+    volumes:
+      - media_volume:/app/media
+
+  # Celery solo arranca con COMPOSE_PROFILES=celery en el .env del servidor,
+  # para no duplicar el procesamiento del buzon IMAP si otro entorno lo hace.
+  worker:
+    <<: *app
+    container_name: liquidador_worker
+    profiles: ["celery"]
+    entrypoint: [""]
+    command: celery -A backend_liquidador worker --loglevel=info --concurrency=2
+    volumes:
+      - media_volume:/app/media
+
+  beat:
+    <<: *app
+    container_name: liquidador_beat
+    profiles: ["celery"]
+    entrypoint: [""]
+    command: celery -A backend_liquidador beat --loglevel=info
+
+volumes:
+  media_volume:
+  postgres_data:
+
+networks:
+  backend_liquidador_network:
+    driver: bridge
