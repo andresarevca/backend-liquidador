@@ -75,7 +75,7 @@ def generar_preinforme(
         raise RuntimeError(f"Error del servicio ia-liquidador: {detalle or str(e)}") from e
 
 
-def buscar_corpus(q: str, municipio: str | None = None, n: int = 6) -> dict:
+def buscar_corpus(q: str, municipio: str | None = None, n: int = 6, owner_id: str | None = None) -> dict:
     """
     Llama a GET /api/corpus/buscar del microservicio ia-liquidador.
 
@@ -90,10 +90,12 @@ def buscar_corpus(q: str, municipio: str | None = None, n: int = 6) -> dict:
     params = {"q": q, "n": n}
     if municipio:
         params["municipio"] = municipio
+    if owner_id:
+        params["owner_id"] = owner_id
     return _get(url, params=params)
 
 
-def listar_fuentes_corpus() -> dict:
+def listar_fuentes_corpus(owner_id: str | None = None) -> dict:
     """
     Llama a GET /api/corpus/fuentes del microservicio ia-liquidador.
 
@@ -101,17 +103,25 @@ def listar_fuentes_corpus() -> dict:
         dict con {fuentes, total_chunks, total_casos_historicos}.
     """
     url = f"{_get_base_url()}/api/corpus/fuentes"
-    return _get(url)
+    return _get(url, params={"owner_id": owner_id} if owner_id else None)
 
 
-def indexar_pdf_corpus(archivo, nombre_archivo: str, municipio: str) -> dict:
+_DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+
+def _mime_corpus(nombre_archivo: str) -> str:
+    return _DOCX_MIME if nombre_archivo.lower().endswith(".docx") else "application/pdf"
+
+
+def indexar_pdf_corpus(archivo, nombre_archivo: str, municipio: str, owner_id: str = "global") -> dict:
     """
     Llama a POST /api/corpus/indexar-pdf del microservicio ia-liquidador.
 
     Args:
         archivo: objeto file-like (ej. UploadedFile de Django) con el contenido del PDF.
-        nombre_archivo: nombre original del archivo (debe terminar en .pdf).
+        nombre_archivo: nombre original del archivo (debe terminar en .pdf o .docx).
         municipio: municipio al que aplica la ordenanza.
+        owner_id: "global" (visible para todos) o el id del dueño del documento.
 
     Returns:
         dict con {titulo, chunks_indexados, municipio}.
@@ -122,8 +132,8 @@ def indexar_pdf_corpus(archivo, nombre_archivo: str, municipio: str) -> dict:
     try:
         resp = requests.post(
             url,
-            files={"archivo": (nombre_archivo, archivo, "application/pdf")},
-            params={"municipio": municipio},
+            files={"archivo": (nombre_archivo, archivo, _mime_corpus(nombre_archivo))},
+            params={"municipio": municipio, "owner_id": owner_id},
             headers=headers,
             timeout=_TIMEOUT,
         )
@@ -143,6 +153,39 @@ def indexar_pdf_corpus(archivo, nombre_archivo: str, municipio: str) -> dict:
             pass
         logger.error("Error HTTP desde ia-liquidador (%s): %s", e.response.status_code, detalle)
         raise RuntimeError(f"Error del servicio ia-liquidador: {detalle or str(e)}") from e
+
+
+class CorpusNoEncontrado(RuntimeError):
+    """El documento a eliminar no existe para ese dueño."""
+
+
+def eliminar_fuente_corpus(fuente: str, owner_id: str) -> dict:
+    """Llama a DELETE /api/corpus/fuente: borra un documento de un dueño ('global' incluido)."""
+    url = f"{_get_base_url()}/api/corpus/fuente"
+    return _delete(url, params={"fuente": fuente, "owner_id": owner_id})
+
+
+def eliminar_dueno_corpus(owner_id: str) -> dict:
+    """Llama a DELETE /api/corpus/dueno/{owner_id}: borra todo el corpus y casos del dueño."""
+    return _delete(f"{_get_base_url()}/api/corpus/dueno/{owner_id}")
+
+
+def _delete(url: str, params: dict | None = None) -> dict:
+    try:
+        resp = requests.delete(url, params=params, headers=_get_headers(), timeout=_TIMEOUT)
+        if resp.status_code == 404:
+            raise CorpusNoEncontrado("Documento no encontrado.")
+        resp.raise_for_status()
+        return resp.json()
+    except requests.exceptions.ConnectionError as e:
+        logger.error("ia-liquidador no disponible: %s", e)
+        raise RuntimeError(
+            "El servicio ia-liquidador no está disponible. "
+            "Verifique que el contenedor esté corriendo en IA_LIQUIDADOR_URL."
+        ) from e
+    except requests.exceptions.HTTPError as e:
+        logger.error("Error HTTP desde ia-liquidador (%s)", e.response.status_code)
+        raise RuntimeError(f"Error del servicio ia-liquidador: {e}") from e
 
 
 def _get(url: str, params: dict | None = None) -> dict:

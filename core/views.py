@@ -248,19 +248,7 @@ def corpus_buscar_view(request):
     n = int(request.GET.get('n', 6))
 
     try:
-        data = buscar_corpus(q, municipio=municipio, n=n)
-    except RuntimeError as exc:
-        return Response({'detail': str(exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
-    return Response(data)
-
-
-@api_view(['GET'])
-def corpus_fuentes_view(request):
-    """Lista los documentos legales indexados y estadísticas del corpus."""
-    from core.ia_client import listar_fuentes_corpus
-
-    try:
-        data = listar_fuentes_corpus()
+        data = buscar_corpus(q, municipio=municipio, n=n, owner_id=str(request.user.pk))
     except RuntimeError as exc:
         return Response({'detail': str(exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
     return Response(data)
@@ -269,22 +257,67 @@ def corpus_fuentes_view(request):
 @api_view(['POST'])
 def corpus_indexar_pdf_view(request):
     """
-    Sube e indexa un PDF de ordenanza municipal en el corpus legal.
+    Sube e indexa un PDF o DOCX en el corpus PRIVADO del usuario autenticado.
+    El corpus global se gestiona solo desde el backoffice (/api/admin/corpus/).
 
     POST /api/corpus/indexar-pdf/  (multipart/form-data: archivo, municipio)
     """
+    return indexar_documento_corpus(request, owner_id=str(request.user.pk))
+
+
+@api_view(['DELETE'])
+def corpus_eliminar_view(request):
+    """
+    Elimina un documento del corpus PRIVADO del usuario autenticado.
+    Un usuario no puede borrar documentos globales ni de otros.
+
+    DELETE /api/corpus/fuente/?fuente=<título>
+    """
+    return eliminar_documento_corpus(request, owner_id=str(request.user.pk))
+
+
+@api_view(['GET'])
+def corpus_fuentes_view(request):
+    """Lista los documentos legales indexados y estadísticas del corpus."""
+    from core.ia_client import listar_fuentes_corpus
+
+    try:
+        data = listar_fuentes_corpus(owner_id=str(request.user.pk))
+    except RuntimeError as exc:
+        return Response({'detail': str(exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+    return Response(data)
+
+
+def eliminar_documento_corpus(request, owner_id: str):
+    """Elimina del corpus el documento `?fuente=` que pertenezca exactamente a owner_id."""
+    from core.ia_client import CorpusNoEncontrado, eliminar_fuente_corpus
+
+    fuente = request.GET.get('fuente', '').strip()
+    if not fuente:
+        return Response({'detail': 'Falta el parámetro "fuente".'}, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        data = eliminar_fuente_corpus(fuente, owner_id)
+    except CorpusNoEncontrado as exc:
+        return Response({'detail': str(exc)}, status=status.HTTP_404_NOT_FOUND)
+    except RuntimeError as exc:
+        return Response({'detail': str(exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+    return Response(data)
+
+
+def indexar_documento_corpus(request, owner_id: str):
+    """Valida el archivo subido y lo indexa en el corpus con el dueño indicado."""
     from core.ia_client import indexar_pdf_corpus
 
     archivo = request.FILES.get('archivo')
-    if not archivo or not archivo.name.lower().endswith('.pdf'):
+    if not archivo or not archivo.name.lower().endswith(('.pdf', '.docx')):
         return Response(
-            {'detail': 'Debe adjuntar un archivo PDF en el campo "archivo".'},
+            {'detail': 'Debe adjuntar un archivo PDF o DOCX en el campo "archivo".'},
             status=status.HTTP_400_BAD_REQUEST,
         )
     municipio = request.POST.get('municipio', 'Nacional')
 
     try:
-        data = indexar_pdf_corpus(archivo, archivo.name, municipio)
+        data = indexar_pdf_corpus(archivo, archivo.name, municipio, owner_id=owner_id)
     except RuntimeError as exc:
         return Response({'detail': str(exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
     return Response(data)
