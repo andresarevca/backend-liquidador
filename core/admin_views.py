@@ -6,7 +6,7 @@ from django.contrib.auth import get_user_model
 from django.db.models import Avg, Count, DurationField, ExpressionWrapper, F
 from django.db.models.functions import TruncDate
 from django.utils import timezone
-from rest_framework import generics
+from rest_framework import generics, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAdminUser
 from rest_framework.response import Response
@@ -21,6 +21,41 @@ from .admin_serializers import (
 from .models import Carpeta, CorreoRechazado
 
 User = get_user_model()
+
+
+@api_view(['GET'])
+@permission_classes([IsAdminUser])
+def corpus_global_fuentes_view(request):
+    """Documentos y estadísticas del corpus GLOBAL (visible para todos los usuarios)."""
+    from .ia_client import listar_fuentes_corpus
+
+    try:
+        data = listar_fuentes_corpus()  # sin owner_id: solo corpus global
+    except RuntimeError as exc:
+        return Response({'detail': str(exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+    return Response(data)
+
+
+@api_view(['DELETE'])
+@permission_classes([IsAdminUser])
+def corpus_global_eliminar_view(request):
+    """DELETE /api/admin/corpus/fuente/?fuente=<título> — borra un documento del corpus global."""
+    from .views import eliminar_documento_corpus
+
+    return eliminar_documento_corpus(request, owner_id='global')
+
+
+@api_view(['POST'])
+@permission_classes([IsAdminUser])
+def corpus_global_indexar_view(request):
+    """
+    Sube e indexa un PDF o DOCX en el corpus GLOBAL.
+
+    POST /api/admin/corpus/indexar-pdf/  (multipart/form-data: archivo, municipio)
+    """
+    from .views import indexar_documento_corpus
+
+    return indexar_documento_corpus(request, owner_id='global')
 
 
 class AdminUsuarioListCreateView(generics.ListCreateAPIView):
