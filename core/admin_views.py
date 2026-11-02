@@ -18,6 +18,7 @@ from .admin_serializers import (
     AdminUsuarioUpdateSerializer,
     CorreoRechazadoSerializer,
 )
+from .filters import filtrar_carpetas
 from .models import Carpeta, CorreoRechazado
 
 User = get_user_model()
@@ -83,7 +84,7 @@ class AdminUsuarioDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 
 class AdminCarpetaListView(generics.ListAPIView):
-    """Listado global de carpetas (todos los usuarios), con filtro opcional ?usuario=<id>."""
+    """Listado global de carpetas (todos los usuarios). Filtros opcionales: ?usuario=<id>, ?estado=, ?search=."""
     permission_classes = [IsAdminUser]
     serializer_class = AdminCarpetaSerializer
 
@@ -92,7 +93,7 @@ class AdminCarpetaListView(generics.ListAPIView):
         usuario_id = self.request.query_params.get('usuario')
         if usuario_id:
             qs = qs.filter(usuario_id=usuario_id)
-        return qs
+        return filtrar_carpetas(qs, self.request.query_params, extra_campos=('usuario__email',))
 
 
 class AdminCarpetaDetailView(generics.RetrieveAPIView):

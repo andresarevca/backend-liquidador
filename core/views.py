@@ -6,6 +6,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework_simplejwt.views import TokenObtainPairView
 
+from .filters import filtrar_carpetas, filtrar_documentos
 from .models import Carpeta, Documento, ResultadoIA
 from .serializers import (
     CambiarPasswordSerializer,
@@ -41,11 +42,15 @@ def cambiar_password_view(request):
 
 
 class CarpetaListView(generics.ListAPIView):
-    """Lista las carpetas del usuario autenticado, ordenadas por fecha de recepción (más reciente primero)."""
+    """Lista las carpetas del usuario autenticado, ordenadas por fecha de recepción (más reciente primero).
+
+    Admite ?search= (caso, remitente o asunto) y ?estado=.
+    """
     serializer_class = CarpetaListSerializer
 
     def get_queryset(self):
-        return Carpeta.objects.filter(usuario=self.request.user)
+        qs = Carpeta.objects.filter(usuario=self.request.user)
+        return filtrar_carpetas(qs, self.request.query_params)
 
 
 class CarpetaDetailView(generics.RetrieveAPIView):
@@ -58,15 +63,16 @@ class CarpetaDetailView(generics.RetrieveAPIView):
 
 
 class DocumentoListView(generics.ListAPIView):
-    """Biblioteca de documentos recibidos en las carpetas del usuario autenticado."""
+    """Biblioteca de documentos recibidos en las carpetas del usuario autenticado. Admite ?search=."""
     serializer_class = DocumentoConCarpetaSerializer
 
     def get_queryset(self):
-        return (
+        qs = (
             Documento.objects.filter(carpeta__usuario=self.request.user)
             .select_related('carpeta')
             .order_by('-subido_en')
         )
+        return filtrar_documentos(qs, self.request.query_params)
 
 
 @api_view(['GET'])
